@@ -1,6 +1,7 @@
 ﻿using Fundoo.Notes.Application.DTOs;
 using Fundoo.Notes.Application.Interfaces;
 using Fundoo.Notes.Domain.Entities;
+using Fundoo.Notes.Infrastructure.Repository;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,13 +13,12 @@ namespace Fundoo.Notes.Api.Controllers
     [Authorize]
     public class NotesController : ControllerBase
     {
-        private readonly INoteRepository _noteRepository;
-        private readonly INoteLabelRepository _noteLabelRepository;
-
-        public NotesController(INoteRepository noteRepository, INoteLabelRepository noteLabelRepository)
+        private readonly INoteService _noteService;
+        private readonly INoteLabelService _noteLabelService;
+        public NotesController(INoteService noteService,INoteLabelService noteLabelService)
         {
-            _noteRepository = noteRepository;
-            _noteLabelRepository = noteLabelRepository;
+            _noteService = noteService;
+            _noteLabelService = noteLabelService;
         }
 
         [HttpPost]
@@ -38,17 +38,14 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var note = new Note
-            {
-                UserId = userId,
-                Title = request.Title.Trim(),
-                Description = request.Description,
-                Color = request.Color
-            };
+            var createdNote = await _noteService.CreateAsync(
+                userId,
+                request.Title,
+                request.Description,
+                request.Color,
+                cancellationToken);
 
-            var createdNote = await _noteRepository.CreateAsync(
-                note, cancellationToken);
-
+           
             return Created($"/api/notes/{createdNote.NoteId}", createdNote);
         }
 
@@ -69,7 +66,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var notes = await _noteRepository.GetAllByUserIdAsync(
+            var notes = await _noteService.GetAllByUserIdAsync(
                 userId,
                 cancellationToken);
 
@@ -94,7 +91,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var note = await _noteRepository.GetByIdAsync(
+            var note = await _noteService.GetByIdAsync(
                 id,
                 userId,
                 cancellationToken);
@@ -126,7 +123,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var notes = await _noteRepository.GetArchivedByUserIdAsync(
+            var notes = await _noteService.GetArchivedByUserIdAsync(
                 userId,
                 cancellationToken);
 
@@ -149,7 +146,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var notes = await _noteRepository.GetTrashedByUserIdAsync(
+            var notes = await _noteService.GetTrashedByUserIdAsync(
                 userId,
                 cancellationToken);
 
@@ -185,11 +182,14 @@ namespace Fundoo.Notes.Api.Controllers
                 IsPinned = request.IsPinned
             };
 
-            var updatedNote = await _noteRepository.UpdateAsync(
-                id,
-                userId,
-                note,
-                cancellationToken);
+            var updatedNote = await _noteService.UpdateAsync(
+            id,
+            userId,
+            request.Title,
+            request.Description,
+            request.Color,
+            request.IsPinned,
+            cancellationToken); 
 
             if (updatedNote is null)
             {
@@ -219,7 +219,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var success = await _noteRepository.SetArchivedAsync(
+            var success = await _noteService.SetArchivedAsync(
                 id, userId, true, cancellationToken);
 
             if (!success)
@@ -247,7 +247,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var success = await _noteRepository.SetArchivedAsync(
+            var success = await _noteService.SetArchivedAsync(
                 id, userId, false, cancellationToken);
 
             if (!success)
@@ -276,7 +276,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var success = await _noteRepository.SetTrashedAsync(
+            var success = await _noteService.SetTrashedAsync(
                 id, userId, true, cancellationToken);
 
             if (!success)
@@ -305,7 +305,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var success = await _noteRepository.SetTrashedAsync(
+            var success = await _noteService.SetTrashedAsync(
                 id, userId, false, cancellationToken);
 
             if (!success)
@@ -333,7 +333,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var success = await _noteRepository.DeletePermanentlyAsync(
+            var success = await _noteService.DeletePermanentlyAsync(
                 id, userId, cancellationToken);
 
             if (!success)
@@ -366,7 +366,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var attached = await _noteLabelRepository.AttachAsync(
+            var attached = await _noteLabelService.AttachAsync(
                 noteId, labelId, userId, cancellationToken);
 
             if (!attached)
@@ -400,7 +400,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var removed = await _noteLabelRepository.RemoveAsync(
+            var removed = await _noteLabelService.RemoveAsync(
                 noteId, labelId, userId, cancellationToken);
 
             if (!removed)

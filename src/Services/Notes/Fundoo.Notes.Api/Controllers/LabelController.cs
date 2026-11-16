@@ -13,11 +13,11 @@ namespace Fundoo.Notes.Api.Controllers
     [Route("api/labels")]
     public class LabelsController : ControllerBase
     {
-        private readonly ILabelRepository _labelRepository;
+        private readonly ILabelService _labelService;
 
-        public LabelsController(ILabelRepository labelRepository)
+        public LabelsController(ILabelService labelService)
         {
-            _labelRepository = labelRepository;
+            _labelService = labelService;
         }
 
         private bool TryGetUserId(out Guid userId)
@@ -40,7 +40,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var labels = await _labelRepository.GetAllByUserIdAsync(
+            var labels = await _labelService.GetAllByUserIdAsync(
                 userId, cancellationToken);
 
             return Ok(labels);
@@ -78,8 +78,8 @@ namespace Fundoo.Notes.Api.Controllers
 
             try
             {
-                var createdLabel = await _labelRepository.CreateAsync(
-                    label, cancellationToken);
+                var createdLabel = await _labelService.CreateAsync(
+                 userId, request.Name, cancellationToken);
 
                 return StatusCode(
                     StatusCodes.Status201Created, createdLabel);
@@ -120,8 +120,8 @@ namespace Fundoo.Notes.Api.Controllers
 
             try
             {
-                var label = await _labelRepository.RenameAsync(
-                    id, userId, name, cancellationToken);
+                var label = await _labelService.RenameAsync(
+                id, userId, request.Name, cancellationToken);
 
                 if (label is null)
                 {
@@ -156,8 +156,8 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var deleted = await _labelRepository.DeleteAsync(
-                id, userId, cancellationToken);
+            var deleted = await _labelService.DeleteAsync(
+            id, userId, cancellationToken);
 
             if (!deleted)
             {

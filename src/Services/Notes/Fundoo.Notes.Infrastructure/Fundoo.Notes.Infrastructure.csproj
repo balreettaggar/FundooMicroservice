@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Fundoo.Notes.Application\Fundoo.Notes.Application.csproj" />
+	<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis"
+                  Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

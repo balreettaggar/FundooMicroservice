@@ -5,8 +5,28 @@ using Fundoo.Notes.Infrastructure.Repository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Fundoo.Notes.Infrastructure.Caching;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using Fundoo.Notes.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var redisConnectionString =
+    builder.Configuration["Redis:ConnectionString"];
+
+if (string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    throw new InvalidOperationException(
+        "Redis connection string is not configured.");
+}
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnectionString;
+    options.InstanceName = "FundooNotes:";
+});
+
+builder.Services.AddScoped<INoteCache, RedisNoteCache>();
 
 builder.Services.AddSingleton<IDbConnectionFactory>(_ =>
 {
@@ -78,12 +98,17 @@ builder.Services
             };
     });
 
+
 builder.Services.AddAuthorization();
+
+// Service registrations
+builder.Services.AddScoped<INoteService, NoteService>();
+builder.Services.AddScoped<ILabelService, LabelService>();
+builder.Services.AddScoped<INoteLabelService, NoteLabelService>();
+
 builder.Services.AddScoped<INoteRepository, NoteRepository>();
 builder.Services.AddScoped<ILabelRepository, LabelRepository>();
-builder.Services.AddScoped<
-    INoteLabelRepository,
-    NoteLabelRepository>();
+builder.Services.AddScoped<INoteLabelRepository,NoteLabelRepository>();
 
 var app = builder.Build();
 
