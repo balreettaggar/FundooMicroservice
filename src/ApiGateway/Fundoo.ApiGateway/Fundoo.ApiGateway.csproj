@@ -10,12 +10,21 @@
     <PackageReference Include="MMLib.SwaggerForOcelot" Version="8.1.0" />
     <PackageReference Include="Ocelot" Version="23.4.3" />
     <PackageReference Include="Ocelot.Provider.Polly" Version="23.4.3" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
   </ItemGroup>
 
 	<ItemGroup>
 		<Content Update="ocelot.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\BuildingBlocks\Fundoo.Observability\Fundoo.Observability.csproj" />
 	</ItemGroup>
 
 </Project>

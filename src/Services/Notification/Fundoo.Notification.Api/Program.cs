@@ -1,5 +1,7 @@
 using Fundoo.Notification.Application;
 using Fundoo.Notification.Infrastructure;
+using Serilog;
+using Fundoo.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,7 +13,19 @@ builder.Services.AddScoped<
     IAccessTokenEmailSender,
     SmtpAccessTokenEmailSender>();
 
+builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("ServiceName", "Fundoo.User.Api"));
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
 {

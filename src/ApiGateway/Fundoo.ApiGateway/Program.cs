@@ -4,6 +4,8 @@ using MMLib.SwaggerForOcelot.Middleware;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
 using Ocelot.Provider.Polly;
+using Serilog;
+using Fundoo.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +24,19 @@ builder.Services.AddHttpClient("NotificationClient", client =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
+builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("ServiceName", "Fundoo.User.Api"));
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 
 // Redirect the Gateway root to its combined Swagger UI.
 app.MapGet("/", () => Results.Redirect("/swagger/index.html"));

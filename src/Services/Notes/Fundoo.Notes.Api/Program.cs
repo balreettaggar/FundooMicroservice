@@ -1,13 +1,16 @@
 
 using Fundoo.Notes.Application.Interfaces;
+using Fundoo.Notes.Application.Services;
+using Fundoo.Notes.Infrastructure.Caching;
 using Fundoo.Notes.Infrastructure.Database;
 using Fundoo.Notes.Infrastructure.Repository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Fundoo.Notes.Infrastructure.Caching;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
-using Fundoo.Notes.Application.Services;
+using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using System.Text;
+using Fundoo.Observability;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -110,8 +113,19 @@ builder.Services.AddScoped<INoteRepository, NoteRepository>();
 builder.Services.AddScoped<ILabelRepository, LabelRepository>();
 builder.Services.AddScoped<INoteLabelRepository,NoteLabelRepository>();
 
+builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("ServiceName", "Fundoo.Notes.Api"));
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
 
+app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 
 app.UseHttpsRedirection();
 
@@ -169,5 +183,10 @@ app.MapGet("/health/database", async (
             statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 });
+
+//app.MapGet("/test-exception", () =>
+//{
+//    throw new InvalidOperationException("Exception handler test");
+//});
 
 app.Run();

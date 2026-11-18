@@ -1,7 +1,9 @@
 using Fundoo.User.Infrastructure;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
+using Serilog;
 using System.Net;
+using Fundoo.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,9 +56,19 @@ builder.Services
     });
 
 
+builder.Host.UseSerilog((context, _, loggerConfiguration) =>
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("ServiceName", "Fundoo.User.Api"));
 
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
 {
