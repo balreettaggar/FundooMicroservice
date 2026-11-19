@@ -20,5 +20,9 @@ namespace Fundoo.User.Application.Interfaces
         Task AddPasswordResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken);
 
         Task<PasswordResetToken?> FindPasswordResetTokenAsync(Guid userId, string tokenHash, CancellationToken cancellationToken);
+
+        Task<AppUser?> FindByExternalLoginAsync(string provider, string providerSubject, CancellationToken cancellationToken);
+
+        Task<AppUser> CreateExternalUserAsync(AppUser user, string provider, string providerSubject, CancellationToken cancellationToken);
     }
 }

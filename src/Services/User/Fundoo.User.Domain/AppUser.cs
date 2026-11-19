@@ -26,5 +26,7 @@ namespace Fundoo.User.Domain
         public DateTime CreatedAtUtc { get; set; }
 
         public DateTime UpdatedAtUtc { get; set; }
+
+        public ICollection<ExternalLogin> ExternalLogins { get; set; } = new List<ExternalLogin>();
     }
 }

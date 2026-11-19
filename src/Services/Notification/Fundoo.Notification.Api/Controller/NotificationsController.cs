@@ -26,7 +26,7 @@ public class NotificationsController : ControllerBase
     //{
     //    if (string.IsNullOrWhiteSpace(request.RecipientEmail) ||
     //        string.IsNullOrWhiteSpace(request.AccessToken))
-    //    {
+    //    {dotnet list .\Fundoo.Notification.Infrastructure\Fundoo.Notification.Infrastructure.csproj package
     //        return BadRequest(new
     //        {
     //            message = "Recipient email and access token are required."
@@ -78,13 +78,13 @@ public class NotificationsController : ControllerBase
             });
         }
 
-        Console.WriteLine("Notification API: Delay started");
+        //Console.WriteLine("Notification API: Delay started");
 
-        await Task.Delay(
-            TimeSpan.FromSeconds(10),
-            cancellationToken);
+        ////await Task.Delay(
+        ////    TimeSpan.FromSeconds(10),
+        ////    cancellationToken);
 
-        Console.WriteLine("Notification API: Delay completed");
+        //Console.WriteLine("Notification API: Delay completed");
 
         //await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
 

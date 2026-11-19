@@ -69,5 +69,32 @@ namespace Fundoo.User.Infrastructure.Repositories
                     cancellationToken);
         }
 
+        public async Task<AppUser?> FindByExternalLoginAsync(
+            string provider, string providerSubject, CancellationToken cancellationToken)
+        {
+            return await dbContext.ExternalLogins
+                .Where(login => login.Provider == provider && login.ProviderSubject == providerSubject)
+                .Select(login => login.User)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        public async Task<AppUser> CreateExternalUserAsync(
+            AppUser user, string provider, string providerSubject, CancellationToken cancellationToken)
+        {
+            if (await FindByNormalizedEmailAsync(user.NormalizedEmail, cancellationToken) is not null)
+                throw new InvalidOperationException("An account with this email already exists. Sign in to that account before linking Google.");
+
+            user.ExternalLogins.Add(new ExternalLogin
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Provider = provider,
+                ProviderSubject = providerSubject
+            });
+            await dbContext.Users.AddAsync(user, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return user;
+        }
+
     }
 }

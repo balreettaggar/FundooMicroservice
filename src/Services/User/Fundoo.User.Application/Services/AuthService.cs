@@ -13,6 +13,28 @@ namespace Fundoo.User.Application.Services
     IPasswordHasher passwordHasher,
     ITokenService tokenService) : IAuthService
     {
+        public async Task<string?> LoginWithExternalProviderAsync(
+            string provider, string providerSubject, string email, string firstName, string lastName,
+            CancellationToken cancellationToken)
+        {
+            var user = await userRepository.FindByExternalLoginAsync(provider, providerSubject, cancellationToken);
+            if (user is null)
+            {
+                var normalizedEmail = email.Trim().ToUpperInvariant();
+                user = new AppUser
+                {
+                    Id = Guid.NewGuid(), FirstName = string.IsNullOrWhiteSpace(firstName) ? "Google" : firstName,
+                    LastName = string.IsNullOrWhiteSpace(lastName) ? "User" : lastName,
+                    Email = email.Trim(), NormalizedEmail = normalizedEmail,
+                    PasswordHash = passwordHasher.Hash(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))),
+                    IsActive = true, CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow
+                };
+                user = await userRepository.CreateExternalUserAsync(user, provider, providerSubject, cancellationToken);
+            }
+            if (!user.IsActive) return null;
+            return tokenService.CreateAccessToken(user);
+        }
+
         public async Task<AppUser> RegisterAsync(
             string firstName,
             string lastName,

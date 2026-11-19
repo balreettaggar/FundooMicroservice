@@ -18,5 +18,7 @@ namespace Fundoo.User.Application.Interfaces
 
         Task<bool> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken cancellationToken);
 
+        Task<string?> LoginWithExternalProviderAsync(string provider, string providerSubject, string email, string firstName, string lastName, CancellationToken cancellationToken);
+
     }
 }

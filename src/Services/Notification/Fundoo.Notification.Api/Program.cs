@@ -22,7 +22,11 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) =>
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+builder.Services.AddFundooCorrelationIds();
+
 var app = builder.Build();
+
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();

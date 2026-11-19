@@ -17,7 +17,7 @@ namespace Fundoo.User.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.33")
+                .HasAnnotation("ProductVersion", "8.0.34")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -69,6 +69,35 @@ namespace Fundoo.User.Infrastructure.Persistence.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Fundoo.User.Domain.ExternalLogin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProviderSubject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Provider", "ProviderSubject")
+                        .IsUnique();
+
+                    b.ToTable("ExternalLogins");
+                });
+
             modelBuilder.Entity("Fundoo.User.Domain.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -96,6 +125,22 @@ namespace Fundoo.User.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens");
+                });
+
+            modelBuilder.Entity("Fundoo.User.Domain.ExternalLogin", b =>
+                {
+                    b.HasOne("Fundoo.User.Domain.AppUser", "User")
+                        .WithMany("ExternalLogins")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Fundoo.User.Domain.AppUser", b =>
+                {
+                    b.Navigation("ExternalLogins");
                 });
 #pragma warning restore 612, 618
         }

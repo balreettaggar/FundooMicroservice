@@ -1,6 +1,8 @@
 ﻿using Fundoo.User.Api.Contract;
 using Fundoo.User.Application.Interfaces;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Polly.Timeout;
 
 namespace Fundoo.User.Api.Controllers
@@ -231,6 +233,65 @@ namespace Fundoo.User.Api.Controllers
                     Message = "Retry attempts failed.",
                     Error = ex.Message
                 });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpGet("google-login")]
+        public IActionResult GoogleLogin()
+        {
+            var properties = new AuthenticationProperties
+            {
+                RedirectUri = Url.Action(nameof(GoogleComplete), "Auth")
+            };
+
+            return Challenge(properties, "GoogleOIDC");
+        }
+
+        [AllowAnonymous]
+        [HttpGet("google-complete")]
+        public async Task<IActionResult> GoogleComplete()
+        {
+            var result = await HttpContext.AuthenticateAsync("ExternalCookie");
+            if (!result.Succeeded || result.Principal is null)
+            {
+                return Unauthorized(new { Message = "Google sign-in failed." });
+            }
+            try
+            {
+                var principal = result.Principal;
+                var subject = principal.FindFirst("sub")?.Value
+                    ?? principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                    ?? principal.FindFirst("email")?.Value;
+                var verified = principal.FindFirst("email_verified")?.Value;
+                var firstName = principal.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value
+                    ?? principal.FindFirst("given_name")?.Value ?? string.Empty;
+                var lastName = principal.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value
+                    ?? principal.FindFirst("family_name")?.Value ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email) ||
+                    !string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase))
+                    return Unauthorized(new { Message = "Google identity or verified email is missing." });
+
+                var token = await authService.LoginWithExternalProviderAsync(
+                    "Google", subject, email, firstName, lastName, HttpContext.RequestAborted);
+                if (token is null) return Unauthorized(new { Message = "Fundoo account is inactive." });
+
+                return Ok(new AuthResponse
+                {
+                    AccessToken = token,
+                    TokenType = "Bearer",
+                    ExpiresAtUtc = DateTime.UtcNow.AddMinutes(configuration.GetValue("Jwt:ExpiryMinutes", 30))
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new ProblemDetails { Status = 409, Title = "Google account cannot be linked", Detail = ex.Message });
+            }
+            finally
+            {
+                await HttpContext.SignOutAsync("ExternalCookie");
             }
         }
 

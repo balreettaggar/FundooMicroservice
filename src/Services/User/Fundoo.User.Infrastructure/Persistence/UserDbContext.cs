@@ -15,6 +15,7 @@ namespace Fundoo.User.Infrastructure.Persistence
 
         public DbSet<PasswordResetToken> PasswordResetTokens =>
             Set<PasswordResetToken>();
+        public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -58,6 +59,18 @@ namespace Fundoo.User.Infrastructure.Persistence
 
                 entity.Property(token => token.TokenHash)
                     .IsRequired();
+            });
+
+            modelBuilder.Entity<ExternalLogin>(entity =>
+            {
+                entity.HasKey(login => login.Id);
+                entity.HasIndex(login => new { login.Provider, login.ProviderSubject }).IsUnique();
+                entity.Property(login => login.Provider).HasMaxLength(100).IsRequired();
+                entity.Property(login => login.ProviderSubject).HasMaxLength(256).IsRequired();
+                entity.HasOne(login => login.User)
+                    .WithMany(user => user.ExternalLogins)
+                    .HasForeignKey(login => login.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }
