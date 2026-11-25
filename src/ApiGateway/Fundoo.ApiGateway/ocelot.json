@@ -54,6 +54,25 @@
         "PeriodTimespan": 10,
         "Limit": 5
       }
+    },
+    {
+      "SwaggerKey": "notification",
+      "UpstreamPathTemplate": "/api/notifications/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "DownstreamPathTemplate": "/api/notifications/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5062
+        }
+      ]
     }
   ],
   "GlobalConfiguration": {
@@ -83,6 +102,16 @@
           "Name": "Notes API",
           "Version": "v1",
           "Url": "http://localhost:5246/swagger/v1/swagger.json"
+        }
+      ]
+    },
+    {
+      "Key": "notification",
+      "Config": [
+        {
+          "Name": "Notification API",
+          "Version": "v1",
+          "Url": "http://localhost:5062/swagger/v1/swagger.json"
         }
       ]
     }

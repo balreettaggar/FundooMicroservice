@@ -127,9 +127,13 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 
-app.UseHttpsRedirection();
-
 if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+if (app.Environment.IsDevelopment() ||
+    builder.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -163,7 +167,7 @@ app.MapGet("/health/database", async (
         return result is int value && value == 1
             ? Results.Ok(new
             {
-                Database = "fundoo_notes",
+                Database = "NotesDb",
                 Status = "Connected"
             })
             : Results.Problem(

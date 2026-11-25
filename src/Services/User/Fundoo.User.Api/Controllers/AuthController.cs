@@ -1,8 +1,9 @@
 ﻿using Fundoo.User.Api.Contract;
+using Fundoo.User.Api.Kafka;
 using Fundoo.User.Application.Interfaces;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Polly.Timeout;
 
 namespace Fundoo.User.Api.Controllers
@@ -11,9 +12,11 @@ namespace Fundoo.User.Api.Controllers
     [Route("api/auth")]
     public class AuthController(
     IAuthService authService,
-    IConfiguration configuration, IHttpClientFactory httpClientFactory) : ControllerBase
-        // primary constructors arrived in c#12, we can directly use the variables, available throughout
-        // the class body
+    IConfiguration configuration,
+    IHttpClientFactory httpClientFactory,
+    PasswordResetProducer passwordResetProducer) : ControllerBase
+    // primary constructors arrived in c#12, we can directly use the variables, available throughout
+    // the class body
     {
         [HttpPost("register")]
         // the next three are producesresponsetype examples showed swagger, example purposes
@@ -100,11 +103,12 @@ namespace Fundoo.User.Api.Controllers
             return Ok(response);
         }
 
+
         [HttpPost("forgot-password")]
         [ProducesResponseType(typeof(ForgotPasswordResponse), StatusCodes.Status200OK)]
         public async Task<ActionResult<ForgotPasswordResponse>> ForgotPassword(
-        [FromBody] ForgotPasswordRequest request,
-        CancellationToken cancellationToken)
+            [FromBody] ForgotPasswordRequest request,
+            CancellationToken cancellationToken)
         {
             var token = await authService.RequestPasswordResetAsync(
                 request.Email, cancellationToken);
@@ -117,66 +121,20 @@ namespace Fundoo.User.Api.Controllers
                 ExpiresAtUtc = null
             };
 
-            // Only send a token when the User service found an active account.
             if (token is null)
             {
                 return Ok(response);
             }
 
-            var notificationBaseUrl = configuration["Notification:BaseUrl"];
-
-            if (string.IsNullOrWhiteSpace(notificationBaseUrl))
-            {
-                return Problem(
-                    statusCode: StatusCodes.Status500InternalServerError,
-                    title: "Notification service is not configured.");
-            }
-
-            var client = httpClientFactory.CreateClient("NotificationClient");
-            // HttpClient is a .NET class used to send HTTP requests to other applications or services.
-
-            var notificationUrl =
-                $"{notificationBaseUrl.TrimEnd('/')}/api/notifications/password-reset";
-
-           
-                var notificationResponse = await client.PostAsJsonAsync(
-                    // This method sends an HTTP POST request to another application.
-                    notificationUrl,
-                    new
-                    {
-                        RecipientEmail = request.Email,
-                        ResetToken = token
-                    },
-                    cancellationToken);
-
-                if (!notificationResponse.IsSuccessStatusCode)
-                {
-                    var errorBody = await notificationResponse.Content
-                        .ReadAsStringAsync(cancellationToken);
-
-                    return StatusCode(
-                        StatusCodes.Status502BadGateway,
-                        new
-                        {
-                            Message = "Notification service returned an error.",
-                            NotificationStatusCode = (int)notificationResponse.StatusCode,
-                            NotificationResponse = errorBody
-                        });
-                }
-            
-
-            //catch (TimeoutRejectedException)
-            //{
-            //    return StatusCode(
-            //        StatusCodes.Status504GatewayTimeout,
-            //        new
-            //        {
-            //            Message = "Notification service request timed out."
-            //        });
-            //}
+            // Publish password-reset event to Kafka.
+            await passwordResetProducer.PublishPasswordResetEventAsync(
+                request.Email,
+                token,
+                cancellationToken);
 
             return Ok(response);
         }
+
 
 
         [HttpPost("reset-password")]

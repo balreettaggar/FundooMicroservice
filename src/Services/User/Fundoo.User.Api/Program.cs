@@ -6,6 +6,8 @@ using System.Net;
 using Fundoo.Observability;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Confluent.Kafka;
+using Fundoo.User.Api.Kafka;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -104,6 +106,25 @@ builder.Services
 builder.Services.AddAuthorization();
 
 builder.Services.AddFundooCorrelationIds();
+
+builder.Services.AddSingleton<IProducer<string, string>>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+
+    var producerConfig = new ProducerConfig
+    {
+        BootstrapServers =
+            configuration["Kafka:BootstrapServers"],
+
+        Acks = Acks.All
+    };
+
+    return new ProducerBuilder<string, string>(
+        producerConfig).Build();
+});
+
+builder.Services.AddSingleton<PasswordResetProducer>();
+
 
 var app = builder.Build();
 
