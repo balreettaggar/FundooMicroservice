@@ -178,5 +178,18 @@ namespace Fundoo.User.Application.Services
             return true;
         }
 
+        public async Task<Guid?> FindUserIdByEmailAsync(
+    string email,
+    CancellationToken cancellationToken)
+        {
+            var normalizedEmail = email.Trim().ToUpperInvariant();
+
+            var user = await userRepository.FindByNormalizedEmailAsync(
+                normalizedEmail,
+                cancellationToken);
+
+            return user is { IsActive: true } ? user.Id : null;
+        }
+
     }
 }

@@ -20,5 +20,9 @@ namespace Fundoo.User.Application.Interfaces
 
         Task<string?> LoginWithExternalProviderAsync(string provider, string providerSubject, string email, string firstName, string lastName, CancellationToken cancellationToken);
 
+        Task<Guid?> FindUserIdByEmailAsync(
+    string email,
+    CancellationToken cancellationToken);
+
     }
 }

@@ -172,26 +172,27 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            var note = new Note
-            {
-                NoteId = id,
-                UserId = userId,
-                Title = request.Title.Trim(),
-                Description = request.Description,
-                Color = request.Color,
-                IsPinned = request.IsPinned
-            };
-
-            var updatedNote = await _noteService.UpdateAsync(
+            var result = await _noteService.UpdateAsync(
             id,
             userId,
             request.Title,
             request.Description,
             request.Color,
             request.IsPinned,
+            request.Version,
             cancellationToken); 
 
-            if (updatedNote is null)
+            if (result.Status == NoteUpdateStatus.Conflict)
+            {
+                return Conflict(new
+                {
+                    Message = "This note changed or is no longer editable. Reload it before saving again.",
+                    ExpectedVersion = request.Version,
+                    CurrentVersion = result.CurrentVersion
+                });
+            }
+
+            if (result.Status == NoteUpdateStatus.NotFound)
             {
                 return NotFound(new
                 {
@@ -199,7 +200,7 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            return Ok(updatedNote);
+            return Ok(result.Note);
         }
 
         [HttpPut("{id:guid}/archive")]
@@ -347,6 +348,107 @@ namespace Fundoo.Notes.Api.Controllers
             return NoContent();
         }
 
+        [HttpPost("{id:guid}/collaborators")]
+        public async Task<IActionResult> AddCollaborator(
+    Guid id,
+    [FromBody] AddCollaboratorRequest request,
+    CancellationToken cancellationToken)
+        {
+            var ownerUserId = GetCurrentUserId();
+            if (ownerUserId is null)
+            {
+                return Unauthorized(new { Message = "A valid user ID is required." });
+            }
+
+            CollaboratorAddResult result;
+
+            try
+            {
+                result = await _noteService.AddCollaboratorAsync(
+                    ownerUserId.Value,
+                    id,
+                    request.Email,
+                    cancellationToken);
+            }
+            catch (UserDirectoryUnavailableException)
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new { Message = "User lookup is temporarily unavailable." });
+            }
+
+            return result.Status switch
+            {
+                CollaboratorAddStatus.Added => Created(
+                    $"/api/notes/{id}/collaborators",
+                    new { UserId = result.CollaboratorUserId }),
+
+                CollaboratorAddStatus.NoteNotFound => NotFound(
+                    new { Message = "Note not found or you are not its owner." }),
+
+                CollaboratorAddStatus.UserNotFound => BadRequest(
+                    new { Message = "No active account was found for that email." }),
+
+                CollaboratorAddStatus.CannotAddSelf => BadRequest(
+                    new { Message = "You cannot add yourself as a collaborator." }),
+
+                CollaboratorAddStatus.AlreadyCollaborator => Conflict(
+                    new { Message = "That user is already a collaborator." }),
+
+                _ => StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        }
+
+        [HttpGet("{id:guid}/collaborators")]
+        public async Task<IActionResult> GetCollaborators(
+            Guid id,
+            CancellationToken cancellationToken)
+        {
+            var ownerUserId = GetCurrentUserId();
+            if (ownerUserId is null)
+            {
+                return Unauthorized(new { Message = "A valid user ID is required." });
+            }
+
+            var collaborators = await _noteService.GetCollaboratorsAsync(
+                ownerUserId.Value,
+                id,
+                cancellationToken);
+
+            if (collaborators is null)
+            {
+                return NotFound(new { Message = "Note not found or you are not its owner." });
+            }
+
+            return Ok(collaborators.Select(userId => new { UserId = userId }));
+        }
+
+        [HttpDelete("{id:guid}/collaborators/{collaboratorUserId:guid}")]
+        public async Task<IActionResult> RemoveCollaborator(
+            Guid id,
+            Guid collaboratorUserId,
+            CancellationToken cancellationToken)
+        {
+            var ownerUserId = GetCurrentUserId();
+            if (ownerUserId is null)
+            {
+                return Unauthorized(new { Message = "A valid user ID is required." });
+            }
+
+            var wasRemoved = await _noteService.RemoveCollaboratorAsync(
+                ownerUserId.Value,
+                id,
+                collaboratorUserId,
+                cancellationToken);
+
+            if (!wasRemoved)
+            {
+                return NotFound(
+                    new { Message = "Note or collaborator not found, or you are not its owner." });
+            }
+
+            return NoContent();
+        }
 
         [HttpPut("{noteId:guid}/labels/{labelId:guid}")]
         public async Task<IActionResult> AttachLabel(
@@ -415,7 +517,16 @@ namespace Fundoo.Notes.Api.Controllers
             return NoContent();
         }
 
+        private Guid? GetCurrentUserId()
+        {
+            var userIdClaim =
+                User.FindFirst("sub")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
+            return Guid.TryParse(userIdClaim, out var userId)
+                ? userId
+                : null;
+        }
 
     }
 }

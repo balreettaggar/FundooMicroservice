@@ -18,5 +18,8 @@ namespace Fundoo.Notes.Application.DTOs
         public string Color { get; set; } = "#FFFFFF";
 
         public bool IsPinned { get; set; }
+
+        [Range(1, long.MaxValue)]
+        public long Version { get; set; }
     }
 }

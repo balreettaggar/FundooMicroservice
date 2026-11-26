@@ -28,6 +28,10 @@ namespace Fundoo.Notes.Domain.Entities
         public DateTime CreatedAt { get; set; }
 
         public DateTime UpdatedAt { get; set; }
+
+        public long Version { get; set; } = 1;
+
+
     }
 
 }

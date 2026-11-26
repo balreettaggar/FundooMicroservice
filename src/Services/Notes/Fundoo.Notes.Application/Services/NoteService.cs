@@ -1,6 +1,7 @@
 ﻿
 using Fundoo.Notes.Application.Interfaces;
 using Fundoo.Notes.Domain.Entities;
+using Fundoo.Notes.Application.DTOs;
 
 namespace Fundoo.Notes.Application.Services;
 
@@ -8,13 +9,16 @@ public class NoteService : INoteService
 {
     private readonly INoteRepository _noteRepository;
     private readonly INoteCache _noteCache;
+    private readonly IUserDirectoryClient _userDirectoryClient;
 
     public NoteService(
-        INoteRepository noteRepository,
-        INoteCache noteCache)
+    INoteRepository noteRepository,
+    INoteCache noteCache,
+    IUserDirectoryClient userDirectoryClient)
     {
         _noteRepository = noteRepository;
         _noteCache = noteCache;
+        _userDirectoryClient = userDirectoryClient;
     }
 
     // CREATE NOTE
@@ -104,13 +108,14 @@ public class NoteService : INoteService
     }
 
     // UPDATE NOTE
-    public async Task<Note?> UpdateAsync(
+    public async Task<NoteUpdateResult> UpdateAsync(
         Guid noteId,
         Guid userId,
         string title,
         string description,
         string color,
         bool isPinned,
+        long expectedVersion,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -126,23 +131,21 @@ public class NoteService : INoteService
             IsPinned = isPinned
         };
 
-        var updatedNote = await _noteRepository.UpdateAsync(
-            noteId, userId, note, cancellationToken);
+        var result = await _noteRepository.UpdateAsync(
+            noteId, userId, note, expectedVersion, cancellationToken);
 
-        if (updatedNote is not null)
+        if (result.Note is not null)
         {
-            // Update cached version
             await _noteCache.SetAsync(
-                updatedNote, cancellationToken);
+                result.Note, cancellationToken);
         }
         else
         {
-            // Remove potentially stale cache entry
             await _noteCache.RemoveAsync(
                 userId, noteId, cancellationToken);
         }
 
-        return updatedNote;
+        return result;
     }
 
     // ARCHIVE / UNARCHIVE NOTE
@@ -199,5 +202,89 @@ public class NoteService : INoteService
         }
 
         return result;
+    }
+
+    public async Task<CollaboratorAddResult> AddCollaboratorAsync(
+    Guid ownerUserId,
+    Guid noteId,
+    string collaboratorEmail,
+    CancellationToken cancellationToken = default)
+    {
+        var noteIsOwned = await _noteRepository.IsOwnedByUserAsync(
+            ownerUserId,
+            noteId,
+            cancellationToken);
+
+        if (!noteIsOwned)
+        {
+            return new CollaboratorAddResult(
+                CollaboratorAddStatus.NoteNotFound);
+        }
+
+        var collaboratorUserId =
+            await _userDirectoryClient.FindUserIdByEmailAsync(
+                collaboratorEmail,
+                cancellationToken);
+
+        if (collaboratorUserId is null)
+        {
+            return new CollaboratorAddResult(
+                CollaboratorAddStatus.UserNotFound);
+        }
+
+        if (collaboratorUserId.Value == ownerUserId)
+        {
+            return new CollaboratorAddResult(
+                CollaboratorAddStatus.CannotAddSelf);
+        }
+
+        var wasAdded = await _noteRepository.AddCollaboratorAsync(
+            ownerUserId,
+            noteId,
+            collaboratorUserId.Value,
+            cancellationToken);
+
+        if (!wasAdded)
+        {
+            // Recheck ownership in case the note changed while we were
+            // looking up the collaborator.
+            var noteIsStillOwned = await _noteRepository.IsOwnedByUserAsync(
+                ownerUserId,
+                noteId,
+                cancellationToken);
+
+            return new CollaboratorAddResult(
+                noteIsStillOwned
+                    ? CollaboratorAddStatus.AlreadyCollaborator
+                    : CollaboratorAddStatus.NoteNotFound);
+        }
+
+        return new CollaboratorAddResult(
+            CollaboratorAddStatus.Added,
+            collaboratorUserId.Value);
+    }
+
+    public Task<IReadOnlyList<Guid>?> GetCollaboratorsAsync(
+        Guid ownerUserId,
+        Guid noteId,
+        CancellationToken cancellationToken = default)
+    {
+        return _noteRepository.GetCollaboratorsAsync(
+            ownerUserId,
+            noteId,
+            cancellationToken);
+    }
+
+    public Task<bool> RemoveCollaboratorAsync(
+        Guid ownerUserId,
+        Guid noteId,
+        Guid collaboratorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        return _noteRepository.RemoveCollaboratorAsync(
+            ownerUserId,
+            noteId,
+            collaboratorUserId,
+            cancellationToken);
     }
 }

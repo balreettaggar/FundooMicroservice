@@ -12,30 +12,44 @@ namespace Fundoo.Notes.Application.Services;
 public class NoteLabelService : INoteLabelService
 {
     private readonly INoteLabelRepository _repository;
+    private readonly INoteCache _noteCache;
 
-    public NoteLabelService(INoteLabelRepository repository)
+    public NoteLabelService(INoteLabelRepository repository, INoteCache noteCache)
     {
         _repository = repository;
+        _noteCache = noteCache;
     }
 
-    public Task<bool> AttachAsync(
+    public async Task<bool> AttachAsync(
         Guid noteId,
         Guid labelId,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        return _repository.AttachAsync(
+        var changed = await _repository.AttachAsync(
             noteId, labelId, userId, cancellationToken);
+        if (changed)
+        {
+            await _noteCache.RemoveAsync(userId, noteId, cancellationToken);
+        }
+
+        return changed;
     }
 
-    public Task<bool> RemoveAsync(
+    public async Task<bool> RemoveAsync(
         Guid noteId,
         Guid labelId,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        return _repository.RemoveAsync(
+        var changed = await _repository.RemoveAsync(
             noteId, labelId, userId, cancellationToken);
+        if (changed)
+        {
+            await _noteCache.RemoveAsync(userId, noteId, cancellationToken);
+        }
+
+        return changed;
     }
 }
 

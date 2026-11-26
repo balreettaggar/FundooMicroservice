@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
+using Fundoo.Notes.Application.DTOs;
 
 using Fundoo.Notes.Domain.Entities;
 
@@ -35,13 +35,14 @@ public interface INoteService
         Guid userId,
         CancellationToken cancellationToken = default);
 
-    Task<Note?> UpdateAsync(
+    Task<NoteUpdateResult> UpdateAsync(
         Guid noteId,
         Guid userId,
         string title,
         string description,
         string color,
         bool isPinned,
+        long expectedVersion,
         CancellationToken cancellationToken = default);
 
     Task<bool> SetArchivedAsync(
@@ -54,5 +55,22 @@ public interface INoteService
 
     Task<bool> DeletePermanentlyAsync(
         Guid noteId, Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<CollaboratorAddResult> AddCollaboratorAsync(
+    Guid ownerUserId,
+    Guid noteId,
+    string collaboratorEmail,
+    CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Guid>?> GetCollaboratorsAsync(
+        Guid ownerUserId,
+        Guid noteId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveCollaboratorAsync(
+        Guid ownerUserId,
+        Guid noteId,
+        Guid collaboratorUserId,
         CancellationToken cancellationToken = default);
 }

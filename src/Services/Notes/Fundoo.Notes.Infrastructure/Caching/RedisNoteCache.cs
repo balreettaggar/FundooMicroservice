@@ -135,7 +135,8 @@ public sealed class RedisNoteCache : INoteCache
         bool IsArchived,
         bool IsTrashed,
         DateTime CreatedAtUtc,
-        DateTime UpdatedAtUtc)
+        DateTime UpdatedAtUtc,
+        long Version)
     {
         public static CachedNote FromNote(Note note)
         {
@@ -149,7 +150,8 @@ public sealed class RedisNoteCache : INoteCache
                 note.IsArchived,
                 note.IsDeleted,
                 note.CreatedAt,
-                note.UpdatedAt);
+                note.UpdatedAt,
+                note.Version);
         }
 
         public Note ToNote()
@@ -165,7 +167,8 @@ public sealed class RedisNoteCache : INoteCache
                 IsArchived = IsArchived,
                 IsDeleted = IsTrashed,
                 CreatedAt = CreatedAtUtc,
-                UpdatedAt = UpdatedAtUtc
+                UpdatedAt = UpdatedAtUtc,
+                Version = Version > 0 ? Version : 1
             };
         }
     }

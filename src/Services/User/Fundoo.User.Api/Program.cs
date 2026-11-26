@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Confluent.Kafka;
 using Fundoo.User.Api.Kafka;
+using Fundoo.User.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,7 @@ builder.Services.AddSwaggerGen();
 // Register PostgreSQL, repository, password hasher and JWT service.
 builder.Services.AddUserInfrastructure(builder.Configuration);
 
+builder.Services.AddScoped<InternalServiceKeyValidator>();
 
 
 builder.Services

@@ -1,4 +1,5 @@
 ﻿using Fundoo.Notes.Domain.Entities;
+using Fundoo.Notes.Application.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,11 +31,34 @@ namespace Fundoo.Notes.Application.Interfaces
     Guid userId,
     CancellationToken cancellationToken = default);
 
-        Task<Note?> UpdateAsync(
-    Guid noteId,
+        Task<bool> IsOwnedByUserAsync(
     Guid userId,
-    Note note,
+    Guid noteId,
     CancellationToken cancellationToken = default);
+
+        Task<bool> AddCollaboratorAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            Guid collaboratorUserId,
+            CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<Guid>?> GetCollaboratorsAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> RemoveCollaboratorAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            Guid collaboratorUserId,
+            CancellationToken cancellationToken = default);
+
+        Task<NoteUpdateResult> UpdateAsync(
+            Guid noteId,
+            Guid userId,
+            Note note,
+            long expectedVersion,
+            CancellationToken cancellationToken = default);
 
         Task<bool> SetArchivedAsync(
     Guid noteId,

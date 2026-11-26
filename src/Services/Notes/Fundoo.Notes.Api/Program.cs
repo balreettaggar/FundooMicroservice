@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Text;
 using Fundoo.Observability;
+using Fundoo.Notes.Infrastructure.Users;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -121,6 +122,26 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) =>
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+
+var userServiceBaseUrl =
+    builder.Configuration["Services:User:BaseUrl"]
+    ?? throw new InvalidOperationException(
+        "User service base URL is not configured.");
+
+var userServiceKey =
+    builder.Configuration["InternalApi:UserServiceKey"]
+    ?? throw new InvalidOperationException(
+        "User service key is not configured.");
+
+builder.Services
+    .AddHttpClient<IUserDirectoryClient, HttpUserDirectoryClient>(client =>
+    {
+        client.BaseAddress = new Uri(userServiceBaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.Add(
+            "X-Fundoo-Service-Key",
+            userServiceKey);
+    });
 
 var app = builder.Build();
 

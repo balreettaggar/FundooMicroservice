@@ -1,6 +1,7 @@
 ﻿using Fundoo.Notes.Application.Interfaces;
 using Fundoo.Notes.Domain.Entities;
 using Npgsql;
+using Fundoo.Notes.Application.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,7 +41,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
         is_trashed,
         is_pinned,
         created_at_utc,
-        updated_at_utc;
+        updated_at_utc,
+        version;
     """;
 
             //await using var command = new NpgsqlCommand(sql, connection);
@@ -94,7 +96,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
                 IsDeleted = reader.GetBoolean(reader.GetOrdinal("is_trashed")),
                 IsPinned = reader.GetBoolean(reader.GetOrdinal("is_pinned")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at_utc")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc"))
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc")),
+                Version = reader.GetInt64(reader.GetOrdinal("version"))
             };
 
             return createdNote;
@@ -120,12 +123,16 @@ namespace Fundoo.Notes.Infrastructure.Repository
             is_trashed,
             is_pinned,
             created_at_utc,
-            updated_at_utc
+            updated_at_utc,
+            version
         FROM notes
-        WHERE user_id = @userId
-          AND is_archived = FALSE
-          AND is_trashed = FALSE
-        ORDER BY created_at_utc DESC;
+        WHERE (notes.user_id = @userId OR EXISTS (
+                  SELECT 1 FROM note_collaborators nc
+                  WHERE nc.note_id = notes.id AND nc.collaborator_user_id = @userId
+              ))
+          AND notes.is_archived = FALSE
+          AND notes.is_trashed = FALSE
+        ORDER BY notes.created_at_utc DESC;
         """;
 
             await using var command = connection.CreateCommand();
@@ -178,7 +185,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
                         reader.GetOrdinal("created_at_utc")),
 
                     UpdatedAt = reader.GetDateTime(
-                        reader.GetOrdinal("updated_at_utc"))
+                        reader.GetOrdinal("updated_at_utc")),
+                    Version = reader.GetInt64(reader.GetOrdinal("version"))
                 };
 
                 notes.Add(note);
@@ -208,11 +216,20 @@ namespace Fundoo.Notes.Infrastructure.Repository
             is_trashed,
             is_pinned,
             created_at_utc,
-            updated_at_utc
+            updated_at_utc,
+            version
         FROM notes
-        WHERE id = @noteId
-          AND user_id = @userId
-          AND is_trashed = FALSE;
+        WHERE notes.id = @noteId
+        AND notes.is_trashed = FALSE
+        AND (
+            notes.user_id = @userId
+            OR EXISTS (
+                SELECT 1
+                FROM note_collaborators nc
+                WHERE nc.note_id = notes.id
+                  AND nc.collaborator_user_id = @userId
+            )
+        );
         """;
 
             await using var command = connection.CreateCommand();
@@ -264,7 +281,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
                     reader.GetOrdinal("created_at_utc")),
 
                 UpdatedAt = reader.GetDateTime(
-                    reader.GetOrdinal("updated_at_utc"))
+                    reader.GetOrdinal("updated_at_utc")),
+                Version = reader.GetInt64(reader.GetOrdinal("version"))
             };
         }
 
@@ -288,12 +306,22 @@ namespace Fundoo.Notes.Infrastructure.Repository
             is_trashed,
             is_pinned,
             created_at_utc,
-            updated_at_utc
+            updated_at_utc,
+            version
         FROM notes
-        WHERE user_id = @userId
-          AND is_archived = TRUE
-          AND is_trashed = FALSE
-        ORDER BY updated_at_utc DESC;
+        WHERE
+            (
+                notes.user_id = @userId
+                OR EXISTS (
+                    SELECT 1
+                    FROM note_collaborators nc
+                    WHERE nc.note_id = notes.id
+                      AND nc.collaborator_user_id = @userId
+                )
+            )
+            AND notes.is_archived = TRUE
+            AND notes.is_trashed = FALSE
+        ORDER BY notes.updated_at_utc DESC;
         """;
 
             await using var command = connection.CreateCommand();
@@ -326,7 +354,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
                     IsDeleted = reader.GetBoolean(reader.GetOrdinal("is_trashed")),
                     IsPinned = reader.GetBoolean(reader.GetOrdinal("is_pinned")),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at_utc")),
-                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc"))
+                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc")),
+                    Version = reader.GetInt64(reader.GetOrdinal("version"))
                 });
             }
 
@@ -352,7 +381,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
         is_trashed,
         is_pinned,
         created_at_utc,
-        updated_at_utc
+        updated_at_utc,
+        version
     FROM notes
     WHERE user_id = @userId
       AND is_trashed = TRUE
@@ -389,18 +419,180 @@ namespace Fundoo.Notes.Infrastructure.Repository
                     IsDeleted = reader.GetBoolean(reader.GetOrdinal("is_trashed")),
                     IsPinned = reader.GetBoolean(reader.GetOrdinal("is_pinned")),
                     CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at_utc")),
-                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc"))
+                    UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at_utc")),
+                    Version = reader.GetInt64(reader.GetOrdinal("version"))
                 });
             }
 
             return notes;
         }
 
+        public async Task<bool> IsOwnedByUserAsync(
+    Guid userId,
+    Guid noteId,
+    CancellationToken cancellationToken = default)
+        {
+            await using var connection =
+                await _connectionFactory.CreateConnectionAsync(cancellationToken);
 
-        public async Task<Note?> UpdateAsync(
+            const string sql = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM notes
+            WHERE id = @noteId
+              AND user_id = @userId
+              AND is_trashed = FALSE
+        );
+        """;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            var noteIdParameter = command.CreateParameter();
+            noteIdParameter.ParameterName = "noteId";
+            noteIdParameter.Value = noteId;
+            command.Parameters.Add(noteIdParameter);
+
+            var userIdParameter = command.CreateParameter();
+            userIdParameter.ParameterName = "userId";
+            userIdParameter.Value = userId;
+            command.Parameters.Add(userIdParameter);
+
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            return result is true;
+        }
+
+        public async Task<bool> AddCollaboratorAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            Guid collaboratorUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await using var connection =
+                await _connectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = """
+        INSERT INTO note_collaborators
+            (note_id, collaborator_user_id, created_at_utc)
+        SELECT
+            @noteId, @collaboratorUserId, CURRENT_TIMESTAMP
+        WHERE EXISTS (
+            SELECT 1
+            FROM notes
+            WHERE id = @noteId
+              AND user_id = @ownerUserId
+              AND is_trashed = FALSE
+        )
+        ON CONFLICT (note_id, collaborator_user_id) DO NOTHING;
+        """;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            var noteIdParameter = command.CreateParameter();
+            noteIdParameter.ParameterName = "noteId";
+            noteIdParameter.Value = noteId;
+            command.Parameters.Add(noteIdParameter);
+
+            var collaboratorParameter = command.CreateParameter();
+            collaboratorParameter.ParameterName = "collaboratorUserId";
+            collaboratorParameter.Value = collaboratorUserId;
+            command.Parameters.Add(collaboratorParameter);
+
+            var ownerParameter = command.CreateParameter();
+            ownerParameter.ParameterName = "ownerUserId";
+            ownerParameter.Value = ownerUserId;
+            command.Parameters.Add(ownerParameter);
+
+            var rowsInserted = await command.ExecuteNonQueryAsync(cancellationToken);
+            return rowsInserted > 0;
+        }
+
+        public async Task<IReadOnlyList<Guid>?> GetCollaboratorsAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!await IsOwnedByUserAsync(ownerUserId, noteId, cancellationToken))
+            {
+                return null;
+            }
+
+            await using var connection =
+                await _connectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = """
+        SELECT collaborator_user_id
+        FROM note_collaborators
+        WHERE note_id = @noteId
+        ORDER BY created_at_utc;
+        """;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            var noteIdParameter = command.CreateParameter();
+            noteIdParameter.ParameterName = "noteId";
+            noteIdParameter.Value = noteId;
+            command.Parameters.Add(noteIdParameter);
+
+            var collaboratorIds = new List<Guid>();
+
+            await using var reader =
+                await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                collaboratorIds.Add(reader.GetGuid(0));
+            }
+
+            return collaboratorIds;
+        }
+
+        public async Task<bool> RemoveCollaboratorAsync(
+            Guid ownerUserId,
+            Guid noteId,
+            Guid collaboratorUserId,
+            CancellationToken cancellationToken = default)
+        {
+            await using var connection =
+                await _connectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = """
+        DELETE FROM note_collaborators nc
+        USING notes n
+        WHERE nc.note_id = n.id
+          AND n.id = @noteId
+          AND n.user_id = @ownerUserId
+          AND nc.collaborator_user_id = @collaboratorUserId;
+        """;
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            var noteIdParameter = command.CreateParameter();
+            noteIdParameter.ParameterName = "noteId";
+            noteIdParameter.Value = noteId;
+            command.Parameters.Add(noteIdParameter);
+
+            var ownerParameter = command.CreateParameter();
+            ownerParameter.ParameterName = "ownerUserId";
+            ownerParameter.Value = ownerUserId;
+            command.Parameters.Add(ownerParameter);
+
+            var collaboratorParameter = command.CreateParameter();
+            collaboratorParameter.ParameterName = "collaboratorUserId";
+            collaboratorParameter.Value = collaboratorUserId;
+            command.Parameters.Add(collaboratorParameter);
+
+            var rowsDeleted = await command.ExecuteNonQueryAsync(cancellationToken);
+            return rowsDeleted > 0;
+        }
+        public async Task<NoteUpdateResult> UpdateAsync(
             Guid noteId,
             Guid userId,
             Note note,
+            long expectedVersion,
             CancellationToken cancellationToken = default)
         {
             await using var connection =
@@ -414,10 +606,20 @@ namespace Fundoo.Notes.Infrastructure.Repository
             description = @description,
             color = @color,
             is_pinned = @isPinned,
-            updated_at_utc = CURRENT_TIMESTAMP
-        WHERE id = @noteId
-          AND user_id = @userId
-          AND is_trashed = FALSE
+            updated_at_utc = CURRENT_TIMESTAMP,
+            version = version + 1
+        WHERE notes.id = @noteId
+          AND notes.version = @expectedVersion
+          AND notes.is_trashed = FALSE
+          AND (
+              notes.user_id = @userId
+              OR EXISTS (
+                  SELECT 1
+                  FROM note_collaborators nc
+                  WHERE nc.note_id = notes.id
+                    AND nc.collaborator_user_id = @userId
+              )
+          )
         RETURNING
             id,
             user_id,
@@ -428,7 +630,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
             is_trashed,
             is_pinned,
             created_at_utc,
-            updated_at_utc;
+            updated_at_utc,
+            version;
         """;
 
             await using var command = connection.CreateCommand();
@@ -441,7 +644,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
         ("title", note.Title),
         ("description", note.Description),
         ("color", note.Color),
-        ("isPinned", note.IsPinned)
+        ("isPinned", note.IsPinned),
+        ("expectedVersion", expectedVersion)
             };
 
             foreach (var (name, value) in parameters)
@@ -457,10 +661,39 @@ namespace Fundoo.Notes.Infrastructure.Repository
 
             if (!await reader.ReadAsync(cancellationToken))
             {
-                return null;
+                await reader.DisposeAsync();
+                await using var versionCommand = connection.CreateCommand();
+                versionCommand.CommandText = """
+                    SELECT n.version
+                    FROM notes n
+                    WHERE n.id = @noteId
+                      AND (
+                          n.user_id = @userId
+                          OR EXISTS (
+                              SELECT 1 FROM note_collaborators nc
+                              WHERE nc.note_id = n.id
+                                AND nc.collaborator_user_id = @userId
+                          )
+                      );
+                    """;
+
+                var versionNoteId = versionCommand.CreateParameter();
+                versionNoteId.ParameterName = "noteId";
+                versionNoteId.Value = noteId;
+                versionCommand.Parameters.Add(versionNoteId);
+
+                var versionUserId = versionCommand.CreateParameter();
+                versionUserId.ParameterName = "userId";
+                versionUserId.Value = userId;
+                versionCommand.Parameters.Add(versionUserId);
+
+                var currentVersion = await versionCommand.ExecuteScalarAsync(cancellationToken);
+                return currentVersion is long version
+                    ? new NoteUpdateResult(NoteUpdateStatus.Conflict, CurrentVersion: version)
+                    : new NoteUpdateResult(NoteUpdateStatus.NotFound);
             }
 
-            return new Note
+            var updatedNote = new Note
             {
                 NoteId = reader.GetGuid(reader.GetOrdinal("id")),
                 UserId = reader.GetGuid(reader.GetOrdinal("user_id")),
@@ -488,8 +721,11 @@ namespace Fundoo.Notes.Infrastructure.Repository
                     reader.GetOrdinal("created_at_utc")),
 
                 UpdatedAt = reader.GetDateTime(
-                    reader.GetOrdinal("updated_at_utc"))
+                    reader.GetOrdinal("updated_at_utc")),
+                Version = reader.GetInt64(reader.GetOrdinal("version"))
             };
+
+            return new NoteUpdateResult(NoteUpdateStatus.Updated, updatedNote);
         }
 
 
@@ -507,7 +743,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
         UPDATE notes
         SET
             is_archived = @isArchived,
-            updated_at_utc = CURRENT_TIMESTAMP
+            updated_at_utc = CURRENT_TIMESTAMP,
+            version = version + 1
         WHERE id = @noteId
           AND user_id = @userId
           AND is_trashed = FALSE;
@@ -552,7 +789,8 @@ namespace Fundoo.Notes.Infrastructure.Repository
         UPDATE notes
         SET
             is_trashed = @isTrashed,
-            updated_at_utc = CURRENT_TIMESTAMP
+            updated_at_utc = CURRENT_TIMESTAMP,
+            version = version + 1
         WHERE id = @noteId
           AND user_id = @userId
           AND is_trashed = @expectedTrashed;
